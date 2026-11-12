@@ -1,0 +1,149 @@
+CREATE TABLE investidore (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cpf VARCHAR(11) NOT NULL UNIQUE,
+    nivel_experiencia INT NOT NULL DEFAULT 0,
+    CONSTRAINT chk_cpf_tamanho CHECK (CHAR_LENGTH(cpf) = 11),
+    CONSTRAINT chk_nivel_experiencia CHECK (nivel_experiencia >= 0)
+);
+
+CREATE TABLE carteira (
+    id SERIAL PRIMARY KEY,
+    investidor_id INT NOT NULL,
+    endereco_wallet VARCHAR(120) NOT NULL UNIQUE,
+    rede_blockchain VARCHAR(50) NOT NULL,
+    saldo_usd DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'Ativa',
+    CONSTRAINT fk_carteiras_investidor FOREIGN KEY (investidor_id) REFERENCES investidore(id),
+    CONSTRAINT chk_saldo_usd CHECK (saldo_usd > 0),
+    CONSTRAINT chk_status_carteira CHECK (status IN ('Ativa', 'Em Analise', 'Bloqueada', 'Pausada'))
+);
+
+CREATE TABLE corretoras (
+    id SERIAL PRIMARY KEY,
+    nome_exchange VARCHAR(100) NOT NULL,
+    cnpj VARCHAR(14) NOT NULL UNIQUE,
+    email_suporte VARCHAR(100) NOT NULL UNIQUE,
+    CONSTRAINT chk_cnpj_tamanho CHECK (CHAR_LENGTH(cnpj) = 14)
+);
+
+CREATE TABLE criptomoedas (
+    id SERIAL PRIMARY KEY,
+    corretora_id INT NOT NULL,
+    nome_moeda VARCHAR(60) NOT NULL,
+    preco_unitario_usd DECIMAL(10, 2) NOT NULL,
+    categoria VARCHAR(20) NOT NULL DEFAULT 'Layer1',
+    CONSTRAINT fk_criptomoedas_corretora FOREIGN KEY (corretora_id) REFERENCES corretoras(id),
+    CONSTRAINT chk_preco_unitario CHECK (preco_unitario_usd > 0),
+    CONSTRAINT chk_categoria_moeda CHECK (categoria IN ('Layer1', 'DeFi', 'Memecoin', 'Stablecoin'))
+);
+
+CREATE TABLE transacoes_criptos (
+    id SERIAL PRIMARY KEY,
+    carteira_id INT NOT NULL,
+    criptomoeda_id INT NOT NULL,
+    quantidade DECIMAL(18, 8) NOT NULL,
+    valor_pago DECIMAL(15, 2) NOT NULL,
+    data_transacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_transacoes_carteira FOREIGN KEY (carteira_id) REFERENCES carteira(id),
+    CONSTRAINT fk_transacoes_criptomoeda FOREIGN KEY (criptomoeda_id) REFERENCES criptomoedas(id),
+    CONSTRAINT chk_quantidade CHECK (quantidade > 0),
+    CONSTRAINT chk_valor_pago CHECK (valor_pago > 0)
+);
+
+INSERT INTO investidore (nome, cpf, nivel_experiencia) VALUES
+('Pedro H Machado', '32156742390', 2),
+('Henrique Anjos', '36396412498', 0),
+('Mateus G Lucas', '56784512411', 5),
+('Allicia Ferreira', '23573456541', 1),
+('Elione Machado', '34634124344', 3);
+
+INSERT INTO carteira (investidor_id, endereco_wallet, rede_blockchain, saldo_usd, status) VALUES
+(1, 'dknsovkmnsijlyuubx9aidr983thdjbsdjhsidgujb', 'Ethereum', 1500.50, 'Ativa'),
+(2, 'soidghwoeiu23ijo2ekfh1972gijsfwiegjhwieuyh', 'Bitcoin', 1232.90, 'Em Analise'),
+(3, '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgA', 'Solana', 9366.09, 'Ativa'),
+(4, 'asof139y8o31knf9378y2ijebisjdvb723ty283urh', 'Solana', 1233.50, 'Bloqueada'),
+(5, 'slkdgj2093u2okhn2eufy2ueb293y8293uhi923t8y', 'Ethereum', 3560.25, 'Em Analise');
+
+
+INSERT INTO corretoras (nome_exchange, cnpj, email_suporte) VALUES
+('BiFinance Brasil', '12345678000190', 'suporte@bifinancebr.com'),
+('Merc Bitcoin', '23456789000181', 'ajuda@mercbitcoin.com.br'),
+('Coinbase', '34567890000172', 'support@coinbase.com'),
+('Kraken', '45678901000163', 'help@kraken.com'),
+('Bybit', '56789012000154', 'suporte@bybit.com');
+
+INSERT INTO criptomoedas (corretora_id, nome_moeda, preco_unitario_usd, categoria) VALUES
+(1, 'Bitcoin', 75000.00, 'Layer1'),
+(1, 'Ethereum', 4300.90, 'Layer1'),
+(2, 'Solan', 15.50, 'DeFi'),
+(3, 'WebCoin', 3.15, 'Memecoin'),
+(4, 'BetCoin', 2.50, 'Stablecoin');
+
+INSERT INTO transacoes_criptos (carteira_id, criptomoeda_id, quantidade, valor_pago) VALUES
+(1, 1, 0.05500000, 3250.00),
+(1, 2, 0.60000000, 1600.00),
+(2, 3, 34.00000000, 375.00),
+(3, 4, 5000.00000000, 750.00),
+(5, 5, 450.00000000, 450.00);
+
+SELECT
+    c.endereco_wallet,
+    c.rede_blockchain,
+    c.saldo_usd,
+    i.nome AS nome_investidor,
+    i.cpf
+FROM carteira c
+INNER JOIN investidore i ON c.investidor_id = i.id
+WHERE c.status IN ('Ativa', 'Em Analise');
+
+SELECT
+    co.nome_exchange,
+    SUM(tc.valor_pago) AS valor_total_movimentado
+FROM transacoes_criptos tc
+INNER JOIN criptomoedas cr ON tc.criptomoeda_id = cr.id
+INNER JOIN corretoras co ON cr.corretora_id = co.id
+GROUP BY co.id, co.nome_exchange;
+
+SELECT
+    c.endereco_wallet,
+    cr.nome_moeda,
+    tc.quantidade,
+    tc.valor_pago,
+    tc.data_transacao
+FROM transacoes_criptos tc
+INNER JOIN carteira c ON tc.carteira_id = c.id
+INNER JOIN criptomoedas cr ON tc.criptomoeda_id = cr.id
+WHERE tc.valor_pago > 500.00
+ORDER BY tc.valor_pago DESC;
+
+CREATE OR REPLACE VIEW vw_painel_carteira AS
+SELECT
+    c.endereco_wallet,
+    c.rede_blockchain,
+    c.status,
+    c.saldo_usd,
+    i.nome AS nome_investidor,
+    i.cpf
+FROM carteira c
+INNER JOIN investidore i ON c.investidor_id = i.id;
+
+CREATE OR REPLACE VIEW vw_investimento_total_carteira AS
+SELECT
+    c.id AS carteira_id,
+    c.endereco_wallet,
+    c.saldo_usd,
+    COUNT(tc.id) AS total_transacoes,
+    COALESCE(SUM(tc.valor_pago), 0.00) AS custo_total_compras
+FROM carteira c
+LEFT JOIN transacoes_cripto tc ON c.id = tc.carteira_id
+GROUP BY c.id, c.endereco_wallet, c.saldo_usd;
+
+SELECT * FROM vw_painel_carteira;
+SELECT * FROM vw_investimento_total_carteira;
+
+SELECT * FROM investidore
+SELECT * FROM carteira
+SELECT * FROM corretoras
+SELECT * FROM criptomoedas
+SELECT * FROM transacoes_criptos
